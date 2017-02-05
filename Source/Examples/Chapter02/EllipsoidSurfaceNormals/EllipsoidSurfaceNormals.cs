@@ -58,40 +58,52 @@ namespace OpenGlobe.Examples
 
             ///////////////////////////////////////////////////////////////////
 
+            // 计算椭球网格
             Mesh mesh = GeographicGridEllipsoidTessellator.Compute(_globeShape,
                 64, 32, GeographicGridEllipsoidVertexAttributes.Position);
 
+            // 创建椭球网格线框显示对象
             _wireframe = new Wireframe(_window.Context, mesh);
             _wireframe.Width = 2;
 
             ///////////////////////////////////////////////////////////////////
 
+            // 创建坐标轴显示对象
             _axes = new Axes();
             _axes.Length = 1.5;
             _axes.Width = 3;
 
             ///////////////////////////////////////////////////////////////////
 
+            // 计算p点椭球表面坐标
             Vector3D p = _globeShape.ToVector3D(new Geodetic3D(0, Trig.ToRadians(45), 0));
+            // 计算p点地理法线向量
             Vector3D deticNormal = _globeShape.GeodeticSurfaceNormal(p);
+            // 计算p点地心法线向量
             Vector3D centricNormal = Ellipsoid.CentricSurfaceNormal(p);
 
             double normalLength = _globeShape.MaximumRadius;
+            // 计算地理法线末端点三维坐标
             Vector3D pDetic = p + (normalLength * deticNormal);
             Vector3D pCentric = p + (normalLength * centricNormal);
 
             VertexAttributeFloatVector3 positionAttribute = new VertexAttributeFloatVector3("position", 4);
+            // 创建地理法线段顶点
             positionAttribute.Values.Add(p.ToVector3F());
             positionAttribute.Values.Add(pDetic.ToVector3F());
+            // 创建地心法线段顶点
             positionAttribute.Values.Add(p.ToVector3F());
             positionAttribute.Values.Add(pCentric.ToVector3F());
 
             VertexAttributeRGBA colorAttribute = new VertexAttributeRGBA("color", 4);
+            // 创建地理法线段顶点颜色
             colorAttribute.AddColor(Color.DarkGreen);
             colorAttribute.AddColor(Color.DarkGreen);
+            // 创建地心法线段顶点颜色
             colorAttribute.AddColor(Color.DarkCyan);
             colorAttribute.AddColor(Color.DarkCyan);
 
+            // 创建地理/地心发现段图形显示元语
             Mesh polyline = new Mesh();
             polyline.PrimitiveType = PrimitiveType.Lines;
             polyline.Attributes.Add(positionAttribute);
@@ -108,6 +120,7 @@ namespace OpenGlobe.Examples
             labelBitmaps.Add(Device.CreateBitmapFromText("Geocentric", font));
             font.Dispose();
 
+            // 创建纹理压缩对象？
             TextureAtlas atlas = new TextureAtlas(labelBitmaps);
 
             _labels = new BillboardCollection(_window.Context, 2);
@@ -115,6 +128,7 @@ namespace OpenGlobe.Examples
             _labels.Add(new Billboard()
             {
                 Position = pDetic,
+                // 取第一个纹理
                 TextureCoordinates = atlas.TextureCoordinates[0],
                 Color = Color.DarkGreen,
                 HorizontalOrigin = HorizontalOrigin.Right,
@@ -123,6 +137,7 @@ namespace OpenGlobe.Examples
             _labels.Add(new Billboard()
             {
                 Position = pCentric,
+                // 取第二个纹理
                 TextureCoordinates = atlas.TextureCoordinates[1],
                 Color = Color.DarkCyan,
                 HorizontalOrigin = HorizontalOrigin.Right,
@@ -135,6 +150,7 @@ namespace OpenGlobe.Examples
             Vector3D east = Vector3D.UnitZ.Cross(deticNormal);
             Vector3D north = deticNormal.Cross(east);
 
+            // 创建p点切平面
             _tangentPlane = new Plane(_window.Context);
             _tangentPlane.Origin = p;
             _tangentPlane.XAxis = east;
