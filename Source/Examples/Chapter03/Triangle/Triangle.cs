@@ -66,6 +66,7 @@ namespace OpenGlobe.Examples
 
             indices.AddTriangle(new TriangleIndicesUnsignedShort(0, 1, 2));
 
+            // 创建VAO对象
             VertexArray va = _window.Context.CreateVertexArray(mesh, sp.VertexAttributes, BufferHint.StaticDraw);
 
             ///////////////////////////////////////////////////////////////////

@@ -33,6 +33,7 @@ namespace OpenGlobe.Examples
 
             Context context = _window.Context;
 
+            // 创建帧缓冲对象
             _framebuffer = context.CreateFramebuffer();
 
             _clearBlack = new ClearState();
@@ -41,6 +42,7 @@ namespace OpenGlobe.Examples
             _clearWhite = new ClearState();
             _clearWhite.Color = Color.White;
 
+            // 创建视口矩形
             _quad = new DayNightViewportQuad(context);
 
             _globe = new DayNightGlobe(context);
@@ -132,6 +134,7 @@ namespace OpenGlobe.Examples
             }
             else if (_oKeyDown && ((e.Key == KeyboardKey.Left) || (e.Key == KeyboardKey.Right)))
             {
+                // 设置DayNightOutput Uniform变量值控制fragment shader输出
                 _quad.DayNightOutput += (e.Key == KeyboardKey.Right) ? 1 : -1;
 
                 if (_quad.DayNightOutput < DayNightOutput.Composite)
@@ -183,9 +186,12 @@ namespace OpenGlobe.Examples
             DisposeFramebufferAttachments();
             _dayTexture = Device.CreateTexture2D(new Texture2DDescription(_window.Width, _window.Height, TextureFormat.RedGreenBlueAlpha8, false));
             _nightTexture = Device.CreateTexture2D(new Texture2DDescription(_window.Width, _window.Height, TextureFormat.RedGreenBlueAlpha8, false));
+            // 混合因子纹理只需要一个32位浮点数格式存储
             _blendTexture = Device.CreateTexture2D(new Texture2DDescription(_window.Width, _window.Height, TextureFormat.Red32f, false));
+            // 深度纹理采用24位定点数格式存储
             _depthTexture = Device.CreateTexture2D(new Texture2DDescription(_window.Width, _window.Height, TextureFormat.Depth24, false));
             
+            // 绑定各纹理与视口矩形（与相应frag shader对应）
             _quad.DayTexture = _dayTexture;
             _quad.NightTexture = _nightTexture;
             _quad.BlendTexture = _blendTexture;
@@ -210,27 +216,40 @@ namespace OpenGlobe.Examples
 
             //
             // Render to frame buffer
+            // 设置OpenGL上下文帧缓冲为用户创建帧缓冲
             //
             context.Framebuffer = _framebuffer;
 
+            // 清除椭球外边缘矢量图形残留像素
+            // 关联纹理与帧缓冲绑定点
+            // 这里的_dayTexture/_nightTexture将由frag shader输出片元填充
             SetFramebufferAttachments(_dayTexture, _nightTexture, null);
+            // 用黑色清除颜色缓冲（黑色是（0，0，0））
             _window.Context.Clear(_clearBlack);
+            // 没有这一步则矢量图形的像素会残留在椭球外边缘
 
+            // 绑定混合因子纹理与帧缓冲对象
             SetFramebufferAttachments(null, null, _blendTexture);
+            // 用白色清除颜色缓冲（白色是（255，255，255））
             _window.Context.Clear(_clearWhite);
+            // 没有这一步则窗口中一片黑
 
             //
             // Render globe to day, night, and blend buffers
+            // 绑定各纹理与帧缓冲各绑定点
             //
             SetFramebufferAttachments(_dayTexture, _nightTexture, _blendTexture);
+            // 把椭球渲染到帧缓冲中
             _globe.Render(context, _sceneState);
 
             if (_showVectorData)
             {
+                // 绑定白天纹理
                 SetFramebufferAttachments(_dayTexture, null, null);
 
                 //
                 // Render vector data, layered bottom to top, to the day buffer only
+                // 在白天纹理上渲染矢量图形（渲染顺序自底向上，底部的会被覆盖）
                 //
                 _countries.Render(context, _sceneState);
                 _rivers.Render(context, _sceneState);
@@ -242,6 +261,7 @@ namespace OpenGlobe.Examples
 
             //
             // Render viewport quad to composite buffers
+            // 复位帧缓冲为默认窗口缓冲并渲染视口矩形（包括前面帧缓冲生成的纹理）
             //
             context.Framebuffer = null;
             _quad.Render(context, _sceneState);

@@ -30,12 +30,16 @@ namespace OpenGlobe.Examples
 
             ///////////////////////////////////////////////////////////////////
 
+            // 创建地形高程对象
             TerrainTile terrainTile = TerrainTile.FromBitmap(new Bitmap(@"ps-e.lg.png"));
+            // 创建地形图形可渲染对象
             _tile = new RayCastedTerrainTile(terrainTile);
+            // 地形高度缩放因子（可以使高山更高）
             _tile.HeightExaggeration = 30;
 
             ///////////////////////////////////////////////////////////////////
 
+            // 根据地形设置相机位置
             double tileRadius = Math.Max(terrainTile.Resolution.X, terrainTile.Resolution.Y) * 0.5;
             _camera = new CameraLookAtPoint(_sceneState.Camera, _window, Ellipsoid.UnitSphere);
             _camera.CenterPoint = new Vector3D(terrainTile.Resolution.X * 0.5, terrainTile.Resolution.Y * 0.5, 0.0);
