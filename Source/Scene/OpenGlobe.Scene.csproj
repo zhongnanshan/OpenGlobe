@@ -41,6 +41,8 @@
   <ItemGroup>
     <Compile Include="Cameras\CameraFly.cs" />
     <Compile Include="Cameras\CameraLookAtPoint.cs" />
+    <Compile Include="Renderables\ViewportQuad\DoubleViewportQuad.cs" />
+    <Compile Include="Renderables\ViewportQuad\DoubleViewportQuadGeometry.cs" />
     <Compile Include="Shapefiles\ShapefileAppearance.cs" />
     <Compile Include="Shapefiles\ShapefileGraphics.cs" />
     <Compile Include="Shapefiles\ShapefileRenderer.cs" />
@@ -223,6 +225,10 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="Globes\Tessellated\Shaders\GlobeHPVS.glsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Renderables\ViewportQuad\Shaders\DoubleViewportQuadFS.glsl" />
+    <EmbeddedResource Include="Renderables\ViewportQuad\Shaders\DoubleViewportQuadVS.glsl" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 

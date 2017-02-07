@@ -41,6 +41,10 @@ namespace OpenGlobe.Examples
                 }
             };
 
+            _frameBuffer = _window.Context.CreateFramebuffer();
+
+            _doubleViewportQuad = new DoubleViewportQuad(_window.Context);
+
             Bitmap bitmap = new Bitmap("NE2_50M_SR_W_4096.jpg");
             _texture = Device.CreateTexture2D(bitmap, TextureFormat.RedGreenBlue8, false);
 
@@ -52,17 +56,41 @@ namespace OpenGlobe.Examples
             _sceneState.Camera.ZoomToTarget(globeShape.MaximumRadius);
         }
 
+        private void UpdateFramebufferAttachments()
+        {
+            DisposeFramebufferAttachments();
+
+            _colorTexture = Device.CreateTexture2D(
+                new Texture2DDescription(_window.Width, _window.Height, TextureFormat.RedGreenBlueAlpha8, false));
+            _depthTexture = Device.CreateTexture2D(
+                new Texture2DDescription(_window.Width, _window.Height, TextureFormat.Depth24, false));
+
+            _frameBuffer.ColorAttachments[0] = _colorTexture;
+            _frameBuffer.DepthAttachment = _depthTexture;
+
+            _doubleViewportQuad.LeftEyeTexture = _colorTexture;
+            _doubleViewportQuad.RightEyeTexture = _colorTexture;
+        }
+
         private void OnResize()
         {
             _window.Context.Viewport = new Rectangle(0, 0, _window.Width, _window.Height);
             _sceneState.Camera.AspectRatio = _window.Width / (double)_window.Height;
+
+            UpdateFramebufferAttachments();
         }
 
         private void OnRenderFrame()
         {
             Context context = _window.Context;
+
+            context.Framebuffer = _frameBuffer;
             context.Clear(_clearState);
+
             _globe.Render(context, _sceneState);
+
+            context.Framebuffer = null;
+            _doubleViewportQuad.Render(context, _sceneState);
         }
 
         private void CenterCameraOnPoint()
@@ -89,10 +117,30 @@ namespace OpenGlobe.Examples
             _texture.Dispose();
             _globe.Dispose();
             _camera.Dispose();
+
+            _doubleViewportQuad.Dispose();
+            DisposeFramebufferAttachments();
+            _frameBuffer.Dispose();
+
             _window.Dispose();
         }
 
         #endregion
+
+        private void DisposeFramebufferAttachments()
+        {
+            if(_colorTexture != null)
+            {
+                _colorTexture.Dispose();
+                _colorTexture = null;
+            }
+
+            if(_depthTexture != null)
+            {
+                _depthTexture.Dispose();
+                _depthTexture = null;
+            }
+        }
 
         private void Run(double updateRate)
         {
@@ -113,5 +161,10 @@ namespace OpenGlobe.Examples
         private readonly ClearState _clearState;
         private readonly RayCastedGlobe _globe;
         private readonly Texture2D _texture;
+
+        private Framebuffer _frameBuffer;
+        private Texture2D _colorTexture;
+        private Texture2D _depthTexture;
+        private DoubleViewportQuad _doubleViewportQuad;
     }
 }
