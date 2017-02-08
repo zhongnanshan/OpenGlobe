@@ -14,6 +14,13 @@ using OpenGlobe.Core;
 
 namespace OpenGlobe.Renderer
 {
+    public enum VREye
+    {
+        LeftEye = 0,
+        RightEye,
+        Invalid
+    }
+
     public class SceneState
     {
         public SceneState()
@@ -26,6 +33,30 @@ namespace OpenGlobe.Renderer
             SunPosition = new Vector3D(200000, 0, 0);
             ModelMatrix = Matrix4D.Identity;
             HighResolutionSnapScale = 1;
+
+            _isVRMode = false;
+            _vrEye = VREye.Invalid;
+            _perspectiveMatrix = Matrix4D.Identity;
+            _viewMatrix = Matrix4D.Identity;
+            HmdPoseMatrix = Matrix4D.Identity;
+        }
+
+        public SceneState(VREye eyeSide, Matrix4D perspectiveMatrix, Matrix4D viewMatrix)
+        {
+            DiffuseIntensity = 0.65f;
+            SpecularIntensity = 0.25f;
+            AmbientIntensity = 0.10f;
+            Shininess = 12;
+            Camera = new Camera();
+            SunPosition = new Vector3D(200000, 0, 0);
+            ModelMatrix = Matrix4D.Identity;
+            HighResolutionSnapScale = 1;
+
+            _isVRMode = false;
+            _vrEye = eyeSide;
+            _perspectiveMatrix = perspectiveMatrix;
+            _viewMatrix = viewMatrix;
+            HmdPoseMatrix = Matrix4D.Identity;
         }
 
         public float DiffuseIntensity { get; set; }
@@ -85,21 +116,46 @@ namespace OpenGlobe.Renderer
         {
             get
             {
-                return Matrix4D.CreatePerspectiveFieldOfView(Camera.FieldOfViewY, Camera.AspectRatio,
-                    Camera.PerspectiveNearPlaneDistance, Camera.PerspectiveFarPlaneDistance);
+                if(_isVRMode)
+                    return _perspectiveMatrix;
+                else
+                    return Matrix4D.CreatePerspectiveFieldOfView(Camera.FieldOfViewY, Camera.AspectRatio,
+                        Camera.PerspectiveNearPlaneDistance, Camera.PerspectiveFarPlaneDistance);
+            }
+
+            set
+            {
+                if(_isVRMode) _perspectiveMatrix = value;
             }
         }
 
         public Matrix4D ViewMatrix
         {
-            get { return Matrix4D.LookAt(Camera.Eye, Camera.Target, Camera.Up); }
+            get
+            {
+                if (_isVRMode)
+                    return _viewMatrix;
+                else
+                    return Matrix4D.LookAt(Camera.Eye, Camera.Target, Camera.Up);
+            }
+
+            set
+            {
+                if (_isVRMode) _viewMatrix = value;
+            }
         }
 
         public Matrix4D ModelMatrix { get; set; }
 
         public Matrix4D ModelViewMatrix
         {
-            get { return ViewMatrix * ModelMatrix; }
+            get
+            {
+                if(_isVRMode)
+                    return ViewMatrix * HmdPoseMatrix * ModelMatrix;
+                else
+                    return ViewMatrix * ModelMatrix;
+            }
         }
 
         public Matrix4D ModelViewMatrixRelativeToEye
@@ -130,6 +186,8 @@ namespace OpenGlobe.Renderer
             get { return ModelViewMatrix * OrthographicMatrix; }
         }
 
+        public Matrix4D HmdPoseMatrix { get; set; }
+
         public Matrix42<double> ModelZToClipCoordinates
         {
             get
@@ -145,5 +203,10 @@ namespace OpenGlobe.Renderer
         }
 
         public double HighResolutionSnapScale { get; set; }
+
+        private bool _isVRMode;
+        private VREye _vrEye;
+        private Matrix4D _perspectiveMatrix;
+        private Matrix4D _viewMatrix;
     }
 }

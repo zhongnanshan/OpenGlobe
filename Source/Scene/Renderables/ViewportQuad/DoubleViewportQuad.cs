@@ -26,7 +26,7 @@ namespace OpenGlobe.Scene
             _geometry = new DoubleViewportQuadGeometry();
         }
 
-        public void Render(Context context, SceneState sceneState)
+        public void Render(Context context, SceneState leftEyeSceneState, SceneState rightEyeSceneState)
         {
             Verify.ThrowIfNull(context);
             Verify.ThrowInvalidOperationIfNull(LeftEyeTexture, "LeftEyeTexture");
@@ -40,14 +40,16 @@ namespace OpenGlobe.Scene
             context.TextureUnits[0].TextureSampler = Device.TextureSamplers.LinearClamp;
             _drawState.VertexArray = _geometry.VertexArray;
 
-            context.Draw(PrimitiveType.Triangles, 0, 2 * 3, _drawState, sceneState);
+            // 画左眼矩形并绑定左眼纹理
+            context.Draw(PrimitiveType.Triangles, 0, 2 * 3, _drawState, leftEyeSceneState);
 
             // 绘制右眼
             context.TextureUnits[0].Texture = RightEyeTexture;
             context.TextureUnits[0].TextureSampler = Device.TextureSamplers.LinearClamp;
             //_drawState.VertexArray = _geometry.VertexArray;
 
-            context.Draw(PrimitiveType.Triangles, 6, 2 * 3, _drawState, sceneState);
+            // 画右眼矩形并绑定右眼纹理
+            context.Draw(PrimitiveType.Triangles, 6, 2 * 3, _drawState, rightEyeSceneState);
         }
 
         public Texture2D LeftEyeTexture { get; set; }
