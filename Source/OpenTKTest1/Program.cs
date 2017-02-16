@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Diagnostics;
+using System.Drawing;
+using System.Drawing.Imaging;
 using OpenTK;
 using OpenTK.Graphics;
 using OpenTK.Graphics.OpenGL;
@@ -14,8 +16,10 @@ namespace OpenTKTest1
         int _shdHnd;
         int _pLoc;
         int _mvLoc;
+        int _texLoc;
         int[] _inds;
         float _fov;
+        int _testTexture;
 
         Matrix4 _pMtx;
         Matrix4 _mvMtx;
@@ -33,8 +37,13 @@ namespace OpenTKTest1
             Vector2[] vert = new Vector2[]
             {
                 new Vector2(-1, -1),    // left dwon
-                new Vector2(1, -1),     // right down
+                new Vector2(0, -1),     // middle down
                 new Vector2(-1, 1),     // left up
+                new Vector2(0, 1),      // middle up
+
+                new Vector2(0, -1),     // middle down
+                new Vector2(1, -1),     // right down
+                new Vector2(0, 1),      // middle up
                 new Vector2(1, 1),      // right up
             };
 
@@ -44,13 +53,20 @@ namespace OpenTKTest1
                 new Vector2(1, 0),
                 new Vector2(0, 1),
                 new Vector2(1, 1),
+
+                new Vector2(0, 0),
+                new Vector2(1, 0),
+                new Vector2(0, 1),
+                new Vector2(1, 1),
             };
 
             // 通过索引复用顶点
             _inds = new int[] 
             {
-                0, 1, 2,
-                1, 3, 2
+                0, 1, 2, 
+                1, 3, 2,
+                4, 5, 6,
+                5, 7, 6,
             };
 
             int vertBufHnd;
@@ -93,6 +109,30 @@ namespace OpenTKTest1
             GL.DisableVertexAttribArray(1);
         }
 
+        private void CreateTestTexture()
+        {
+            Bitmap bitmap = new Bitmap("NE2_50M_SR_W_4096.jpg");
+            BitmapData data = bitmap.LockBits(new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+                ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format24bppRgb);
+
+            GL.GenTextures(1, out _testTexture);
+            GL.BindTexture(TextureTarget.Texture2D, _testTexture);
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb8, bitmap.Width, bitmap.Height,
+                0, OpenTK.Graphics.OpenGL.PixelFormat.Bgr, PixelType.UnsignedByte, data.Scan0);
+
+            GL.GenerateMipmap(GenerateMipmapTarget.Texture2D);
+
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.LinearMipmapLinear);
+
+            //float largest;
+            //GL.GetFloat(All.MaxTextureMaxAnisotropyExt, out largest);
+
+            GL.BindTexture(TextureTarget.Texture2D, 0);
+        }
+
         private int CompileShaders(string vertShaderSrc, string fragShaderSrc)
         {
             int vertexShaderHandle = GL.CreateShader(ShaderType.VertexShader);
@@ -112,9 +152,6 @@ namespace OpenTKTest1
 
             GL.AttachShader(shaderProgramHnd, vertexShaderHandle);
             GL.AttachShader(shaderProgramHnd, fragmentShaderHandle);
-
-            //GL.BindAttribLocation(shaderProgramHandle, 0, "in_position");
-            //GL.BindAttribLocation(shaderProgramHandle, 1, "in_normal");
 
             GL.LinkProgram(shaderProgramHnd);
             Debug.WriteLine(GL.GetProgramInfoLog(shaderProgramHnd));
@@ -144,13 +181,15 @@ void main()
             string fragShdSrc = @"
 #version 330
 
+uniform sampler2D texture1;
+
 in vec2 texcoord;
 
 out vec4 out_frag_color;
 
 void main()
 {
-    out_frag_color = vec4(1, 0, 0, 1);
+    out_frag_color = texture(texture1, texcoord);
 }";
 
             _shdHnd = CompileShaders(vertShdSrc, fragShdSrc);
@@ -159,12 +198,15 @@ void main()
 
             _pLoc = GL.GetUniformLocation(_shdHnd, "projection_matrix");
             _mvLoc = GL.GetUniformLocation(_shdHnd, "modelview_matrix");
+            _texLoc = GL.GetUniformLocation(_shdHnd, "texture1");
 
             float aspectRatio = Width / (float)Height;
             // 注意近裁剪面值表示到照相机的距离，比这个距离小的因为太近而被剔除
-            Matrix4.CreatePerspectiveFieldOfView(_fov, aspectRatio, 1, 100, out _pMtx);
+            //Matrix4.CreatePerspectiveFieldOfView(_fov, aspectRatio, 1, 100, out _pMtx);
+            Matrix4.CreateOrthographicOffCenter(-1, 1, -1, 1, -1, 1, out _pMtx);
             // 注意相机的位置正好在近裁剪面上（若在向原点移动一点将看不到图像）
-            _mvMtx = Matrix4.LookAt(new Vector3(0, 0, 1), new Vector3(0, 0, 0), new Vector3(0, 1, 0));
+            //_mvMtx = Matrix4.LookAt(new Vector3(0, 0, 0), new Vector3(0, 0, 0), new Vector3(0, 1, 0));
+            _mvMtx = Matrix4.Identity;
 
             GL.UniformMatrix4(_pLoc, false, ref _pMtx);
             GL.UniformMatrix4(_mvLoc, false, ref _mvMtx);
@@ -209,14 +251,17 @@ void main()
             // 创建vaoHnd对象
             CreateWinVao();
 
+            // 加载纹理
+            CreateTestTexture();
+
             // 创建Shaders对象
             CreateShaders();
 
             // 开启深度测试（绘制前需要先清深度缓冲）
-            GL.Enable(EnableCap.DepthTest);
+            //GL.Enable(EnableCap.DepthTest);
             // 开启背面剔除（相机移到(0,0,-1)将看不到图像）
             // 只有面法线与照相机视线夹角大于90度的面才可见
-            GL.Enable(EnableCap.CullFace);
+            //GL.Enable(EnableCap.CullFace);
             // 设备背景默认颜色
             GL.ClearColor(0, 0, 0, 0);
         }
@@ -224,7 +269,8 @@ void main()
         protected override void OnResize(EventArgs e)
         {
             float aspectRatio = Width / (float)Height;
-            Matrix4.CreatePerspectiveFieldOfView(_fov, aspectRatio, 1, 100, out _pMtx);
+            //Matrix4.CreatePerspectiveFieldOfView(_fov, aspectRatio, 1, 100, out _pMtx);
+            Matrix4.CreateOrthographicOffCenter(-1, 1, -1, 1, -1, 1, out _pMtx);
             GL.UniformMatrix4(_pLoc, false, ref _pMtx);
 
             GL.Viewport(0, 0, Width, Height);
@@ -237,12 +283,15 @@ void main()
 
         protected override void OnRenderFrame(FrameEventArgs e)
         {
-            //GL.Viewport(0, 0, Width, Height);
-            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            //GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            GL.Clear(ClearBufferMask.ColorBufferBit);
+
+            GL.ActiveTexture(0);
+            GL.BindTexture(TextureTarget.Texture2D, _testTexture);
+            //GL.Uniform1(_texLoc, 0);
 
             GL.UseProgram(_shdHnd);
             GL.BindVertexArray(_vaoHnd);
-            //GL.BindBuffer(BufferTarget.ElementArrayBuffer, vaoHnd);
             GL.DrawElements(PrimitiveType.Triangles, _inds.Length, DrawElementsType.UnsignedInt, 0);
 
             SwapBuffers();
