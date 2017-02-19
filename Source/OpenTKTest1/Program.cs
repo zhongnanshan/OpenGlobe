@@ -12,6 +12,17 @@ namespace OpenTKTest1
     {
         #region "initial"
 
+        struct FramebufferDesc
+        {
+            public int m_nDepthBufferId;
+            public int m_nRenderTextureId;
+            public int m_nRenderFramebufferId;
+            public int m_nResolveTextureId;
+            public int m_nResolveFramebufferId;
+        };
+        FramebufferDesc _leftEyeDesc;
+        FramebufferDesc _rightEyeDesc;
+
         int _vaoHnd;
         int _shdHnd;
         int _pLoc;
@@ -21,8 +32,20 @@ namespace OpenTKTest1
         float _fov;
         int _testTexture;
 
+        int _vaoObjHnd;
+        int[] _indsObj;
+        int _shdObjHnd;
+        int _pObjLoc;
+        int _mvObjLoc;
+
+        // 立体设备输出渲染尺寸
+        int _renderWidth;
+        int _renderHeight;
+
         Matrix4 _pMtx;
         Matrix4 _mvMtx;
+        Matrix4 _pObjMtx;
+        Matrix4 _mvObjMtx;
 
         #endregion
 
@@ -30,6 +53,9 @@ namespace OpenTKTest1
             DisplayDevice.Default, 3, 3, GraphicsContextFlags.ForwardCompatible | GraphicsContextFlags.Debug)
         {
             Keyboard.KeyDown += OpenTKKeyDown;
+
+            _renderWidth = Width;
+            _renderHeight = Height;
         }
 
         private void CreateWinVao()
@@ -104,7 +130,6 @@ namespace OpenTKTest1
             GL.BindVertexArray(0);
             GL.BindBuffer(BufferTarget.ElementArrayBuffer, 0);
             GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
-
             GL.DisableVertexAttribArray(0);
             GL.DisableVertexAttribArray(1);
         }
@@ -131,6 +156,40 @@ namespace OpenTKTest1
             //GL.GetFloat(All.MaxTextureMaxAnisotropyExt, out largest);
 
             GL.BindTexture(TextureTarget.Texture2D, 0);
+        }
+
+        private void CreateFramebuffer(int width, int height, ref FramebufferDesc whichEye)
+        {
+            GL.GenFramebuffers(1, out whichEye.m_nRenderFramebufferId);
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, whichEye.m_nRenderFramebufferId);
+
+            GL.GenRenderbuffers(1, out whichEye.m_nDepthBufferId);
+            GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, whichEye.m_nDepthBufferId);
+            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, 4, RenderbufferStorage.DepthComponent24, width, height);
+            GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthAttachment, RenderbufferTarget.Renderbuffer, whichEye.m_nDepthBufferId);
+
+            GL.GenTextures(1, out whichEye.m_nRenderTextureId);
+            GL.BindTexture(TextureTarget.Texture2DMultisample, whichEye.m_nRenderTextureId);
+            GL.TexImage2DMultisample(TextureTargetMultisample.Texture2DMultisample, 4, PixelInternalFormat.Rgb8, width, height, true);
+            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2DMultisample, whichEye.m_nRenderTextureId, 0);
+
+            GL.GenFramebuffers(1, out whichEye.m_nResolveFramebufferId);
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, whichEye.m_nResolveFramebufferId);
+
+            GL.GenTextures(1, out whichEye.m_nResolveTextureId);
+            GL.BindTexture(TextureTarget.Texture2D, whichEye.m_nResolveTextureId);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, 0);
+            GL.TexImage2D(TextureTarget.Texture2D, 0, PixelInternalFormat.Rgb8, width, height, 0, OpenTK.Graphics.OpenGL.PixelFormat.Rgb, PixelType.UnsignedByte, IntPtr.Zero);
+            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, whichEye.m_nResolveTextureId, 0);
+
+            FramebufferErrorCode errCode = GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer);
+            if (errCode != FramebufferErrorCode.FramebufferComplete)
+            {
+                throw new Exception("framebuffer consistency check is failure!");
+            }
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         }
 
         private int CompileShaders(string vertShaderSrc, string fragShaderSrc)
@@ -214,6 +273,100 @@ void main()
             GL.UseProgram(0);
         }
 
+        private void CreateObjVao()
+        {
+            Vector3[] verts = new Vector3[]
+            {
+                // XY面前面
+                new Vector3(-1, -1, 1), // 0 left down before
+                new Vector3(1, -1, 1),  // 1 right down before
+                new Vector3(-1, 1, 1),  // 2 left up before
+                new Vector3(1, 1, 1),   // 3 right up before
+
+                // XY面后面
+                new Vector3(-1, -1, -1),// 4 left down after
+                new Vector3(1, -1, -1), // 5 right down after
+                new Vector3(-1, 1, -1), // 6 left up after
+                new Vector3(1, 1, -1),  // 7 right up after
+            };
+
+            _indsObj = new int[]
+            {
+                0, 1, 2, 1, 3, 2,       // face before
+                4, 6, 5, 5, 6, 7,       // face after
+                0, 2, 4, 2, 6, 4,       // face left
+                1, 5, 3, 5, 7, 3,       // face right
+                2, 3, 6, 3, 7, 6,       // face up
+                0, 4, 1, 1, 4, 5,       // face down
+            };
+
+            int vertBufHnd;
+            int indBufHnd;
+
+            GL.GenVertexArrays(1, out _vaoObjHnd);
+            GL.BindVertexArray(_vaoObjHnd);
+
+            GL.GenBuffers(1, out vertBufHnd);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, vertBufHnd);
+            GL.BufferData<Vector3>(BufferTarget.ArrayBuffer, verts.Length * Vector3.SizeInBytes, verts, BufferUsageHint.StaticDraw);
+
+            GL.EnableVertexAttribArray(0);
+            GL.VertexAttribPointer(0, 3, VertexAttribPointerType.Float, true, 0, 0);
+
+            GL.GenBuffers(1, out indBufHnd);
+            GL.BindBuffer(BufferTarget.ElementArrayBuffer, indBufHnd);
+            GL.BufferData<int>(BufferTarget.ElementArrayBuffer, _indsObj.Length * sizeof(int), _indsObj, BufferUsageHint.StaticDraw);
+
+            GL.BindVertexArray(0);
+            GL.BindBuffer(BufferTarget.ArrayBuffer, 0);
+            GL.BindBuffer(BufferTarget.ElementArrayBuffer, 0);
+            GL.DisableVertexAttribArray(0);
+        }
+
+        private void CreateObjShaders()
+        {
+            string vertShdSrc = @"
+#version 330
+
+uniform mat4 projection_matrix;
+uniform mat4 modelview_matrix;
+
+layout(location = 0) in vec3 in_pos;
+
+void main()
+{
+    gl_Position = projection_matrix * modelview_matrix * vec4(in_pos, 1);
+}";
+
+            string fragShdSrc = @"
+#version 330
+
+out vec4 out_frag_color;
+
+void main()
+{
+    out_frag_color = vec4(1, 0, 0, 1);
+}";
+
+            _shdObjHnd = CompileShaders(vertShdSrc, fragShdSrc);
+
+            GL.UseProgram(_shdObjHnd);
+
+            _pObjLoc = GL.GetUniformLocation(_shdHnd, "projection_matrix");
+            _mvObjLoc = GL.GetUniformLocation(_shdHnd, "modelview_matrix");
+
+            float aspectRatio = _renderWidth / (float)_renderHeight;
+            // 注意近裁剪面值表示到照相机的距离，比这个距离小的因为太近而被剔除
+            Matrix4.CreatePerspectiveFieldOfView(_fov, aspectRatio, 1, 100, out _pObjMtx);
+            // 注意相机的位置正好在近裁剪面上（若在向原点移动一点将看不到图像）
+            _mvObjMtx = Matrix4.LookAt(new Vector3(0, 0, 3), new Vector3(0, 0, 0), new Vector3(0, 1, 0));
+
+            GL.UniformMatrix4(_pObjLoc, false, ref _pObjMtx);
+            GL.UniformMatrix4(_mvObjLoc, false, ref _mvObjMtx);
+
+            GL.UseProgram(0);
+        }
+
         private void OpenTKKeyDown(object sender, OpenTK.Input.KeyboardKeyEventArgs e)
         {
             switch (e.Key)
@@ -239,6 +392,127 @@ void main()
             GL.Enable(EnableCap.DebugOutputSynchronous);
         }
 
+        private void CalcCurrentVPMatrix()
+        {
+            float aspectRatio = _renderWidth / (float)_renderHeight;
+            // 注意近裁剪面值表示到照相机的距离，比这个距离小的因为太近而被剔除
+            Matrix4.CreatePerspectiveFieldOfView(_fov, aspectRatio, 1, 100, out _pObjMtx);
+            // 注意相机的位置正好在近裁剪面上（若在向原点移动一点将看不到图像）
+            _mvObjMtx = Matrix4.LookAt(new Vector3(1.5f, 1.6f, 2.5f), new Vector3(0, 0, 0), new Vector3(0, 1, 0));
+        }
+
+        private void RenderObjScene()
+        {
+            GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
+            GL.Disable(EnableCap.DepthTest);
+
+            GL.UseProgram(_shdObjHnd);
+            GL.BindVertexArray(_vaoObjHnd);
+
+            CalcCurrentVPMatrix();
+            GL.UniformMatrix4(_pObjLoc, false, ref _pObjMtx);
+            GL.UniformMatrix4(_mvObjLoc, false, ref _mvObjMtx);
+
+            GL.DrawElements(PrimitiveType.Triangles, _indsObj.Length, DrawElementsType.UnsignedInt, 0);
+
+            GL.BindVertexArray(0);
+            GL.UseProgram(0);
+        }
+
+        private void RenderStereoTargets()
+        {
+            GL.ClearColor(0, 0, 0, 1);
+
+            // left eye
+            GL.Enable(EnableCap.Multisample);
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, _leftEyeDesc.m_nRenderFramebufferId);
+            GL.Viewport(0, 0, _renderWidth, _renderHeight);
+            RenderObjScene();
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+
+            GL.Disable(EnableCap.Multisample);
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _leftEyeDesc.m_nRenderFramebufferId);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _leftEyeDesc.m_nResolveFramebufferId);
+
+            GL.BlitFramebuffer(0, 0, _renderWidth, _renderHeight, 0, 0, _renderWidth, _renderHeight, 
+                ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear);
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
+
+            // right eye
+            GL.Enable(EnableCap.Multisample);
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, _rightEyeDesc.m_nRenderFramebufferId);
+            GL.Viewport(0, 0, _renderWidth, _renderHeight);
+            RenderObjScene();
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+
+            GL.Disable(EnableCap.Multisample);
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _rightEyeDesc.m_nRenderFramebufferId);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, _rightEyeDesc.m_nResolveFramebufferId);
+
+            GL.BlitFramebuffer(0, 0, _renderWidth, _renderHeight, 0, 0, _renderWidth, _renderHeight, 
+                ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Linear);
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0);
+        }
+
+        private void RenderWinScene()
+        {
+            GL.Disable(EnableCap.DepthTest);
+            GL.Viewport(0, 0, Width, Height);
+
+            //GL.Clear(ClearBufferMask.ColorBufferBit);
+
+            GL.UseProgram(_shdHnd);
+            GL.BindVertexArray(_vaoHnd);
+
+            GL.BindTexture(TextureTarget.Texture2D, _leftEyeDesc.m_nResolveTextureId);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+            GL.DrawElements(PrimitiveType.Triangles, _inds.Length / 2, DrawElementsType.UnsignedInt, 0);
+
+            GL.BindTexture(TextureTarget.Texture2D, _rightEyeDesc.m_nResolveTextureId);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapS, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureWrapT, (int)TextureWrapMode.ClampToEdge);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)TextureMagFilter.Linear);
+            GL.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)TextureMinFilter.Linear);
+            GL.DrawElements(PrimitiveType.Triangles, _inds.Length / 2, DrawElementsType.UnsignedInt, _inds.Length / 2 * sizeof(int));
+
+            GL.BindVertexArray(0);
+            GL.UseProgram(0);
+        }
+
+        private void RenderWinSceneTest()
+        {
+            GL.Disable(EnableCap.DepthTest);
+            GL.Viewport(0, 0, Width, Height);
+
+            GL.Clear(ClearBufferMask.ColorBufferBit);
+
+            GL.UseProgram(_shdHnd);
+            GL.BindVertexArray(_vaoHnd);
+
+            //GL.ActiveTexture(0);
+            GL.BindTexture(TextureTarget.Texture2D, _testTexture);
+            //GL.Uniform1(_texLoc, 0);
+            GL.DrawElements(PrimitiveType.Triangles, _inds.Length / 2, DrawElementsType.UnsignedInt, 0);
+
+            GL.BindTexture(TextureTarget.Texture2D, _testTexture);
+            //GL.Uniform1(_texLoc, 0);
+            GL.DrawElements(PrimitiveType.Triangles, _inds.Length / 2, DrawElementsType.UnsignedInt, _inds.Length / 2 * sizeof(int));
+
+            GL.BindVertexArray(0);
+            GL.UseProgram(0);
+        }
+
         protected override void OnLoad(EventArgs e)
         {
             VSync = VSyncMode.On;
@@ -257,6 +531,16 @@ void main()
             // 创建Shaders对象
             CreateShaders();
 
+            // 创建主渲染场景
+            CreateObjVao();
+
+            // 创建主渲染场景shaders
+            CreateObjShaders();
+
+            // 创建帧缓冲对象
+            CreateFramebuffer(_renderWidth, _renderHeight, ref _leftEyeDesc);
+            CreateFramebuffer(_renderWidth, _renderHeight, ref _rightEyeDesc);
+
             // 开启深度测试（绘制前需要先清深度缓冲）
             //GL.Enable(EnableCap.DepthTest);
             // 开启背面剔除（相机移到(0,0,-1)将看不到图像）
@@ -271,9 +555,9 @@ void main()
             float aspectRatio = Width / (float)Height;
             //Matrix4.CreatePerspectiveFieldOfView(_fov, aspectRatio, 1, 100, out _pMtx);
             Matrix4.CreateOrthographicOffCenter(-1, 1, -1, 1, -1, 1, out _pMtx);
-            GL.UniformMatrix4(_pLoc, false, ref _pMtx);
+            //GL.UniformMatrix4(_pLoc, false, ref _pMtx);
 
-            GL.Viewport(0, 0, Width, Height);
+            //GL.Viewport(0, 0, Width, Height);
         }
 
         protected override void OnUpdateFrame(FrameEventArgs e)
@@ -283,16 +567,13 @@ void main()
 
         protected override void OnRenderFrame(FrameEventArgs e)
         {
-            //GL.Clear(ClearBufferMask.ColorBufferBit | ClearBufferMask.DepthBufferBit);
-            GL.Clear(ClearBufferMask.ColorBufferBit);
+            // 渲染主场景
+            RenderStereoTargets();
+            //RenderObjScene();
 
-            GL.ActiveTexture(0);
-            GL.BindTexture(TextureTarget.Texture2D, _testTexture);
-            //GL.Uniform1(_texLoc, 0);
-
-            GL.UseProgram(_shdHnd);
-            GL.BindVertexArray(_vaoHnd);
-            GL.DrawElements(PrimitiveType.Triangles, _inds.Length, DrawElementsType.UnsignedInt, 0);
+            // 渲染伴随窗口
+            RenderWinScene();
+            //RenderWinSceneTest();
 
             SwapBuffers();
         }
